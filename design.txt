@@ -1,0 +1,74 @@
+The program design follows closely the version of TCP described in the book,
+modulo more particular timeout calculations such as TCP CUBIC and the
+descriptions of TCP Reno/Vegas. In particular, in sender.py the only timing
+features implemented from the textbook are the standard calculations
+presented therein. We allow for variation in initial RTT and multiplicative
+factor of timeout in order to allow for more timely testing (e.g., with
+larger files or larger values for bit error, loss, and reordering).
+
+The program sender.py was constructed module on top of module, with
+refactoring taking place as necessary as layering was written. After
+constructing the class for a TCP packet, first, a
+basic send operation through the unreliable channel. Then, a fixed timeout
+interval that would see retransmission. Then, checking for ACKs was added.
+Then, FIN was implemented. Then, timeout values were calculated more
+precisely. Then, support for sending arbitrary files was supported with the
+binary operation on open().
+
+The program sender.py starts by shooting out packets until it reaches the
+maximum number of packets, calculated by dividing window size by MSS. Then,
+it keeps a timer on the first packet. If it receives an ACK for some packet,
+everything in the window to the left of that packet (inclusive) is chopped
+off. If the window is non-empty, a timer on the first packet is started
+again. RTT is measured with a separate timer which undertakes its
+calculations once a desired ACK comes back from receiver.py.
+
+There are a few design considerations I made for sender.py. First, I
+discarded the idea of multithreading, instead opting to check for ACKs at
+the beginning of each iteration of the infinite while loop. Because open
+further research I realized that threading is not concurrent, and it did not
+seem reasonable to send packets and check for ACKs in parallel given the
+resource intensity of concurrent programming and the smallness of the task
+of checking for ACKs.
+
+Even better, the time it takes to send out a packet should be much smaller
+than RTT. So in particular, our window can be assumed to always be up to
+date with the state of the communication session: no ACKs will be detected
+too late.
+
+I decided to implement TCP fast retransmit to help speed up transmission on
+very large files. Because as remarked in the README, errors through NEWUDPL
+quickly ramp up timeout.
+
+The program receiver.py checks the incoming packet for corruption. If
+corrupt, it sends an ACK back with the previous ACK number. If it is out of
+order, buffer it if is larger than the desired sequence number. If
+everything is correct with the packet, write its data to a file, as well as
+any consecutive packets in the buffer. It then sends a cumulative ACK.
+
+Design considerations for receiver.py: I decided to make the packets in the buffer in order using a simple
+algorithm which traverses the array to find the spot where a packet should
+go (ordered in increasing order by sequence number). This is O(n), vs O(n
+log n), where n is the length of the buffer.
+
+The design considerations I made for both were first to open files as binary vs.
+text to support general files (not just text!).
+
+Also, because the requirements initially are so complex (there are many, many
+states to keep track of!), I wanted to make the code as readable as I could
+on first pass, possibly at the cost of efficiency. So, I decided to use struct.pack() to make TCP headers, as
+the syntax of struct makes very clear what data occurs at which index in a
+TCP header. At least, this is a huge improvement upon my first idea, which
+was just going to be taking a huge bytes object b'\0\0...' and splicing in
+information as I constructed the TCP header.
+
+On the topic of readability there is the question of why I have so
+many global declarations at the start of my functions. Indeed, these could
+be replaced but I would have to weave local variables through function
+calls, and really all variables, especailly window and timeout, should be
+readily available to all programs. Because of this, the cost of having to
+put out a huge list of global declarations at the beginning of each function
+seemed alright to me given the weaving I would have to do otherwise.
+Finally, I tested everything on localhost so I would not have to carry
+around 3 computers. But localhost is just an address supplied to the
+programs: it only matters that it is an address!
